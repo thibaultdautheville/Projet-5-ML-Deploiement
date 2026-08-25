@@ -1,0 +1,12 @@
+numpy>=1.26,<2.4
+pandas>=2.2,<2.4
+scikit-learn>=1.5,<1.8
+xgboost>=2.0,<3.4
+imbalanced-learn>=0.12
+dill>=0.3.8
+fastapi
+uvicorn[standard]
+pydantic
+pytest
+pytest-cov
+python-dotenv

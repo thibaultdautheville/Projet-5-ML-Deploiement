@@ -18,4 +18,4 @@ __pycache__/
 *.pyc
 venv/
 .env
-*.ipynb_checkpoints/
+*.ipynb_checkpoints/.coverage

@@ -163,6 +163,7 @@ def preprocess_input(df: pd.DataFrame) -> pd.DataFrame:
 import json
 
 FEATURE_NAMES_PATH = Path(__file__).parent.parent / "models" / "feature_names.json"
+THRESHOLD_PATH = Path(__file__).parent.parent / "models" / "threshold.json"
 
 def load_feature_names(path: Path = FEATURE_NAMES_PATH) -> list:
     """
@@ -174,25 +175,52 @@ def load_feature_names(path: Path = FEATURE_NAMES_PATH) -> list:
         return json.load(f)
 
 
-def predict(model, df: pd.DataFrame, feature_names: list = None):
+def load_threshold(path: Path = THRESHOLD_PATH) -> float:
+    """Charge le seuil de decision retenu lors de l'entrainement."""
+    if not path.is_file():
+        raise FileNotFoundError(f"Seuil introuvable : {path}")
+
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+
+    seuil = float(data["seuil"])
+
+    if not 0 <= seuil <= 1:
+        raise ValueError(f"Seuil invalide : {seuil}")
+
+    return seuil
+
+
+def predict(
+    model,
+    df: pd.DataFrame,
+    feature_names: list = None,
+    threshold: float = None,
+):
     X2 = preprocess_input(df)
 
     if feature_names is None:
         feature_names = load_feature_names()
 
+    if threshold is None:
+        threshold = load_threshold()
+
     colonnes_manquantes = set(feature_names) - set(X2.columns)
     if colonnes_manquantes:
-        raise ValueError(f"Colonnes manquantes après preprocessing : {colonnes_manquantes}")
+        raise ValueError(
+            f"Colonnes manquantes apres preprocessing : {colonnes_manquantes}"
+        )
 
-    X2 = X2[feature_names]  # force l'ordre exact attendu par le modèle
+    X2 = X2[feature_names]
 
-    predictions = model.predict(X2)
     probabilities = model.predict_proba(X2)[:, 1]
+    predictions = (probabilities >= threshold).astype(int)
 
     return {
         "predictions": predictions.tolist(),
         "probabilities": probabilities.tolist(),
     }
+
 
 # ------------------------------------------------------------------
 # CLASSES DÉRIVÉES (bins définis dans le notebook d'entraînement)

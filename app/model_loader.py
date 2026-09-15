@@ -11,7 +11,7 @@ S_intermediare_2.ipynb et NE DOIVENT PAS être recalculées dynamiquement
 en production, sous peine de "train-serving skew".
 """
 
-import joblib
+from xgboost import XGBClassifier
 import pandas as pd
 from pathlib import Path
 
@@ -28,7 +28,7 @@ GENRE_MAPPING = {'F': 0, 'M': 1}
 # Modalités one-hot à générer (drop_first=True → la modalité de référence n'est PAS dans la liste)
 CATEGORIES_ONE_HOT = {
     'statut_marital': ['Divorcé(e)', 'Marié(e)'],  # référence : Célibataire
-    'departement': ['Consulting', 'Ressources Humaines', 'Commercial'],  # référence : Commercial
+    'departement': ['Consulting', 'Ressources Humaines'],  # référence : Commercial
     'poste': [
         'Cadre Commercial', 'Consultant', 'Directeur Technique',
         'Manager', 'Représentant Commercial', 'Ressources Humaines',
@@ -52,25 +52,24 @@ COLS_SATISFACTION = [
 ]
 
 # Chemin par défaut vers le modèle sérialisé
-MODEL_PATH = Path(__file__).parent.parent / "models" / "model.pkl"
+MODEL_PATH = Path(__file__).parent.parent / "models" / "xgb_model_v2.json"
 
 # ------------------------------------------------------------------
 # CHARGEMENT DU MODÈLE (une seule fois, au démarrage de l'API)
 # ------------------------------------------------------------------
 
 def load_model(model_path: Path = MODEL_PATH):
-    """
-    Charge le modèle sérialisé (joblib) depuis le disque.
-    À appeler une seule fois au démarrage de l'application FastAPI,
-    pas à chaque requête (coûteux en I/O).
-    """
-    if not model_path.exists():
-        raise FileNotFoundError(
-            f"Modèle introuvable à l'emplacement : {model_path}. "
-            "Vérifie que le fichier a bien été exporté depuis le notebook "
-            "(joblib.dump(model, 'model.pkl'))."
-        )
-    return joblib.load(model_path)
+    """Charge le modele natif et controle les noms et leur ordre."""
+    if not model_path.is_file():
+        raise FileNotFoundError(f"Modele introuvable : {model_path}")
+
+    modele = XGBClassifier()
+    modele.load_model(model_path)
+
+    if modele.get_booster().feature_names != load_feature_names():
+        raise ValueError("Les variables du modele et du JSON different.")
+
+    return modele
 
 
 # ------------------------------------------------------------------
@@ -110,9 +109,8 @@ def preprocess_input(df: pd.DataFrame) -> pd.DataFrame:
 
     # --- Encodage des variables catégorielles ---
     X2['genre'] = X2['genre'].map(GENRE_MAPPING)
+    X2['heure_supplementaires'] = X2['heure_supplementaires'].map({'Non': 0, 'Oui': 1})
     X2['frequence_deplacement'] = X2['frequence_deplacement'].map(ORDRE_DEPLACEMENT)
-    for col, modalites in CATEGORIES_ONE_HOT.items():
-        X2 = _one_hot_manual(X2, col, modalites)
 
     for col, modalites in CATEGORIES_ONE_HOT.items():
         X2 = _one_hot_manual(X2, col, modalites)
@@ -172,7 +170,7 @@ def load_feature_names(path: Path = FEATURE_NAMES_PATH) -> list:
     Remplace model.feature_names_in_ car le modèle XGBoost a été
     entraîné sur un array numpy (sans noms de colonnes), pas un DataFrame.
     """
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 

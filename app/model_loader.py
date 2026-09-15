@@ -28,7 +28,7 @@ GENRE_MAPPING = {'F': 0, 'M': 1}
 # Modalités one-hot à générer (drop_first=True → la modalité de référence n'est PAS dans la liste)
 CATEGORIES_ONE_HOT = {
     'statut_marital': ['Divorcé(e)', 'Marié(e)'],  # référence : Célibataire
-    'departement': ['Consulting', 'Ressources Humaines'],  # référence : Commercial
+    'departement': ['Consulting', 'Ressources Humaines', 'Commercial'],  # référence : Commercial
     'poste': [
         'Cadre Commercial', 'Consultant', 'Directeur Technique',
         'Manager', 'Représentant Commercial', 'Ressources Humaines',
@@ -52,8 +52,7 @@ COLS_SATISFACTION = [
 ]
 
 # Chemin par défaut vers le modèle sérialisé
-MODEL_PATH = Path(__file__).parent / "model" / "model.joblib"
-
+MODEL_PATH = Path(__file__).parent.parent / "models" / "model.pkl"
 
 # ------------------------------------------------------------------
 # CHARGEMENT DU MODÈLE (une seule fois, au démarrage de l'API)
@@ -69,7 +68,7 @@ def load_model(model_path: Path = MODEL_PATH):
         raise FileNotFoundError(
             f"Modèle introuvable à l'emplacement : {model_path}. "
             "Vérifie que le fichier a bien été exporté depuis le notebook "
-            "(joblib.dump(model, 'model.joblib'))."
+            "(joblib.dump(model, 'model.pkl'))."
         )
     return joblib.load(model_path)
 
@@ -77,6 +76,19 @@ def load_model(model_path: Path = MODEL_PATH):
 # ------------------------------------------------------------------
 # FEATURE ENGINEERING (réplique exacte du notebook)
 # ------------------------------------------------------------------
+
+def _one_hot_manual(df: pd.DataFrame, col: str, modalites: list) -> pd.DataFrame:
+    """
+    Réplique pd.get_dummies(df[col], drop_first=True) mais de façon
+    déterministe : les colonnes générées sont TOUJOURS les mêmes,
+    même si une modalité est absente du batch actuel (ex: 1 seule ligne
+    en prédiction temps réel).
+    """
+    for modalite in modalites:
+        nom_colonne = f"{col}_{modalite}"
+        df[nom_colonne] = (df[col] == modalite).astype(int)
+    return df.drop(columns=[col])
+
 
 def preprocess_input(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -99,6 +111,16 @@ def preprocess_input(df: pd.DataFrame) -> pd.DataFrame:
     # --- Encodage des variables catégorielles ---
     X2['genre'] = X2['genre'].map(GENRE_MAPPING)
     X2['frequence_deplacement'] = X2['frequence_deplacement'].map(ORDRE_DEPLACEMENT)
+    for col, modalites in CATEGORIES_ONE_HOT.items():
+        X2 = _one_hot_manual(X2, col, modalites)
+
+    for col, modalites in CATEGORIES_ONE_HOT.items():
+        X2 = _one_hot_manual(X2, col, modalites)
+
+    # --- Classes dérivées (expérience, augmentation) ---
+    X2 = _add_experience_classe(X2)
+    X2 = _add_augmentation_classe(X2)   
+
 
     # --- Feature engineering (7 features, ordre du notebook) ---
 
@@ -139,32 +161,104 @@ def preprocess_input(df: pd.DataFrame) -> pd.DataFrame:
     return X2
 
 
-# ------------------------------------------------------------------
-# PRÉDICTION
-# ------------------------------------------------------------------
 
-def predict(model, df: pd.DataFrame):
+import json
+
+FEATURE_NAMES_PATH = Path(__file__).parent.parent / "models" / "feature_names.json"
+
+def load_feature_names(path: Path = FEATURE_NAMES_PATH) -> list:
     """
-    Applique le preprocessing puis retourne la prédiction du modèle.
-
-    Paramètres
-    ----------
-    model : objet modèle scikit-learn (ou compatible) déjà chargé
-    df : pd.DataFrame brut (une ou plusieurs lignes)
-
-    Retourne
-    --------
-    dict avec la/les prédiction(s) et la/les probabilité(s) associée(s)
+    Charge la liste ordonnée des features attendues par le modèle.
+    Remplace model.feature_names_in_ car le modèle XGBoost a été
+    entraîné sur un array numpy (sans noms de colonnes), pas un DataFrame.
     """
+    with open(path) as f:
+        return json.load(f)
+
+
+def predict(model, df: pd.DataFrame, feature_names: list = None):
     X2 = preprocess_input(df)
 
-    # ⚠️ Il faudra vérifier ici que X2 contient EXACTEMENT les colonnes
-    # attendues par le modèle, dans le bon ordre. On le fera à l'étape
-    # suivante avec model.feature_names_in_ (scikit-learn >= 1.0).
+    if feature_names is None:
+        feature_names = load_feature_names()
+
+    colonnes_manquantes = set(feature_names) - set(X2.columns)
+    if colonnes_manquantes:
+        raise ValueError(f"Colonnes manquantes après preprocessing : {colonnes_manquantes}")
+
+    X2 = X2[feature_names]  # force l'ordre exact attendu par le modèle
+
     predictions = model.predict(X2)
-    probabilities = model.predict_proba(X2)[:, 1]  # proba classe positive
+    probabilities = model.predict_proba(X2)[:, 1]
 
     return {
         "predictions": predictions.tolist(),
         "probabilities": probabilities.tolist(),
     }
+
+# ------------------------------------------------------------------
+# CLASSES DÉRIVÉES (bins définis dans le notebook d'entraînement)
+# ------------------------------------------------------------------
+
+BINS_EXPERIENCE = [-1, 0, 2, 5, 9]
+LABELS_EXPERIENCE = ['Aucune_experience', 'Junior', 'Confirme', 'Senior']
+
+BINS_AUGMENTATION = [10, 14, 18, 22, 25]
+LABELS_AUGMENTATION = ['Faible_10-14%', 'Moderee_15-18%', 'Forte_19-22%', 'Exceptionnelle_23-25%']
+
+
+def _add_experience_classe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Dérive 'experience_classe' à partir de 'nombre_experiences_precedentes',
+    puis génère les colonnes one-hot correspondantes (sans drop_first,
+    car dans le notebook toutes les modalités sont gardées ici).
+    """
+    classe = pd.cut(
+        df['nombre_experiences_precedentes'],
+        bins=BINS_EXPERIENCE,
+        labels=LABELS_EXPERIENCE,
+    )
+
+    if classe.isna().any():
+        raise ValueError(
+            "nombre_experiences_precedentes hors bornes attendues "
+            f"(bins={BINS_EXPERIENCE}). Valeur reçue : "
+            f"{df['nombre_experiences_precedentes'].tolist()}"
+        )
+
+    for label in LABELS_EXPERIENCE:
+        df[f"experience_classe_{label}"] = (classe == label).astype(int)
+
+    return df
+
+
+def _add_augmentation_classe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Nettoie 'augementation_salaire_precedente' (retire le '%' si présent),
+    dérive 'augmentation_classe', puis génère les colonnes one-hot.
+    """
+    valeurs = (
+        df['augementation_salaire_precedente']
+        .astype(str)
+        .str.replace('%', '', regex=False)
+        .str.strip()
+        .astype(float)
+    )
+    df['augementation_salaire_precedente'] = valeurs  # remplace la colonne brute par la version numérique
+
+    classe = pd.cut(
+        valeurs,
+        bins=BINS_AUGMENTATION,
+        labels=LABELS_AUGMENTATION,
+    )
+
+    if classe.isna().any():
+        raise ValueError(
+            "augementation_salaire_precedente hors bornes attendues "
+            f"(bins={BINS_AUGMENTATION}). Valeur reçue : {valeurs.tolist()}"
+        )
+
+    for label in LABELS_AUGMENTATION:
+        df[f"augmentation_classe_{label}"] = (classe == label).astype(int)
+
+    return df

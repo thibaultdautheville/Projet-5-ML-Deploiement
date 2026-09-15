@@ -33,6 +33,7 @@
   "statut_marital_Marié(e)",
   "departement_Consulting",
   "departement_Ressources Humaines",
+  "departement_Commercial",
   "poste_Cadre Commercial",
   "poste_Consultant",
   "poste_Directeur Technique",
@@ -45,12 +46,5 @@
   "domaine_etude_Infra & Cloud",
   "domaine_etude_Marketing",
   "domaine_etude_Ressources Humaines",
-  "domaine_etude_Transformation Digitale",
-  "anciennete_ratio",
-  "stabilite_poste",
-  "ecart_experience_totale",
-  "revenu_par_anciennete",
-  "indice_satisfaction_global",
-  "stagnation_promotion",
-  "jeune_dans_poste_haut"
+  "domaine_etude_Transformation Digitale"
 ]

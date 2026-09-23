@@ -18,4 +18,5 @@ __pycache__/
 *.pyc
 venv/
 .env
-*.ipynb_checkpoints/
+*.ipynb_checkpoints/.coverage
+data/DataFrameRH_clean_1ligne.csv

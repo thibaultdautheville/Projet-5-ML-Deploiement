@@ -91,3 +91,6 @@ def test_augmentation_hors_bornes_declenche_erreur(
 
     with pytest.raises(ValueError):
         preprocess_input(individu)
+
+def test_modele_attend_54_features(model):
+    assert model.n_features_in_ == 54

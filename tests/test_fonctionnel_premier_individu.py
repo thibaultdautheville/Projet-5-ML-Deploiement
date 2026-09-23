@@ -1,6 +1,6 @@
 from pathlib import Path
 import json
-
+import pytest
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -80,11 +80,19 @@ def executer_test_premier_individu():
     return resultat
 
 
-def test_prediction_premier_individu():
+def test_prediction_premier_individu(
+    db_session_factory,
+):
     resultat = executer_test_premier_individu()
-    assert resultat["prediction"] in [0, 1]
-    assert 0 <= resultat["probabilite_attrition"] <= 1
 
+    assert resultat["prediction"] == 1
+
+    assert resultat[
+        "probabilite_attrition"
+    ] == pytest.approx(
+        0.9106922149658203,
+        rel=1e-6,
+    )
 
 if __name__ == "__main__":
     executer_test_premier_individu()

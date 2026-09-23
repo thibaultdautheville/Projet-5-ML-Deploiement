@@ -26,3 +26,9 @@ dev = [
     "pytest>=8.4.2",
     "pytest-cov>=7.1.0",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: tests nécessitant une vraie instance PostgreSQL",
+]

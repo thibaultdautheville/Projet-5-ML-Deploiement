@@ -1,23 +1,39 @@
-# Projet-5-ML-Déploiement
-Je suis freelance spécialisé en machine learning et j'ai reçu une demande de la part de votre client Futurisys, une entreprise innovante qui souhaite rendre ses modèles de machine learning opérationnels et accessibles via une API performante. Je suis chargé de déployer un modèle de machine learning en production.
+# Projet 5 - Déploiement d'un modèle de Machine Learning
 
+Ce projet a pour objectif de rendre opérationnel un modèle de Machine Learning de prédiction du départ des employés.
 
+Le modèle XGBoost entraîné lors d'un projet précédent est exposé à travers une API REST développée avec FastAPI.
 
-## 📁 Structure du dépôt
+Le projet intègre également :
 
-\```
-.
-├── app/            # Code source de l'API (FastAPI, modèle, BDD)
-├── db/             # Scripts de création et peuplement de la BDD
-├── tests/          # Tests unitaires et fonctionnels (Pytest)
-├── docs/           # Documentation technique complémentaire
-├── models/         # Modèle ML entraîné (.pkl)
-└── .github/        # Pipeline CI/CD (GitHub Actions)
+- le prétraitement des données nécessaires au modèle ;
+- la validation des données d'entrée avec Pydantic ;
+- la persistance des prédictions dans une base PostgreSQL ;
+- des tests unitaires, fonctionnels et d'intégration avec Pytest ;
+- un contrôle de non-régression des performances du modèle ;
+- une gestion reproductible des dépendances avec `uv`.
 
+La mise en place de la CI/CD et du déploiement sur Hugging Face Spaces complète l'architecture du projet.
 
-## ⚙️ Installation
+---
 
-### Prérequis
-- Python 3.10+
-- PostgreSQL 15+ (ou Docker)
-- Git
+## Architecture générale
+
+Le fonctionnement de l'application est le suivant :
+
+```text
+Utilisateur
+    |
+    v
+API FastAPI
+    |
+    +--> Validation Pydantic
+    |
+    +--> Prétraitement des variables
+    |
+    +--> Modèle XGBoost
+    |
+    +--> Prédiction
+    |
+    v
+PostgreSQL

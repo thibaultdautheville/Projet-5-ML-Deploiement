@@ -20,3 +20,8 @@ venv/
 .env
 *.ipynb_checkpoints/.coverage
 data/DataFrameRH_clean_1ligne.csv
+
+# Tests et couverture
+.coverage
+htmlcov/
+.pytest_cache/

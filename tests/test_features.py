@@ -94,3 +94,55 @@ def test_augmentation_hors_bornes_declenche_erreur(
 
 def test_modele_attend_54_features(model):
     assert model.n_features_in_ == 54
+
+def test_modele_introuvable_declenche_erreur(tmp_path):
+    chemin_inexistant = tmp_path / "modele_inexistant.json"
+
+    with pytest.raises(FileNotFoundError, match="Modele introuvable"):
+        load_model(chemin_inexistant)
+
+
+def test_modele_et_features_incompatibles_declenchent_erreur(monkeypatch):
+    import app.model_loader as model_loader
+
+    monkeypatch.setattr(
+        model_loader,
+        "load_feature_names",
+        lambda: ["feature_incorrecte"],
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Les variables du modele et du JSON different",
+    ):
+        model_loader.load_model()
+
+
+def test_seuil_introuvable_declenche_erreur(tmp_path):
+    chemin_inexistant = tmp_path / "threshold_inexistant.json"
+
+    with pytest.raises(FileNotFoundError, match="Seuil introuvable"):
+        load_threshold(chemin_inexistant)
+
+def test_seuil_invalide_declenche_erreur(tmp_path):
+    fichier_seuil = tmp_path / "threshold_invalide.json"
+    fichier_seuil.write_text('{"seuil": 1.5}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Seuil invalide"):
+        load_threshold(fichier_seuil)
+
+def test_feature_manquante_apres_preprocessing_declenche_erreur(
+    model,
+    premier_individu,
+):
+    feature_names = load_feature_names() + ["feature_inexistante"]
+
+    with pytest.raises(
+        ValueError,
+        match="Colonnes manquantes apres preprocessing",
+    ):
+        predict(
+            model,
+            premier_individu,
+            feature_names=feature_names,
+        )

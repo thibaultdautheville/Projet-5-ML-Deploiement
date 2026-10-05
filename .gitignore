@@ -25,3 +25,12 @@ data/DataFrameRH_clean_1ligne.csv
 .coverage
 htmlcov/
 .pytest_cache/
+
+# macOS
+.DS_Store
+
+# Environnement virtuel Python
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
